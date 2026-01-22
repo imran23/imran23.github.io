@@ -11,15 +11,17 @@ Because you're using a hybrid app with a WebView, **you must intercept requests 
 You'll override `shouldInterceptRequest` and perform SSL pinning **manually** for HTTPS requests.
 
 ```kotlin
-import android.webkit.WebView
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebViewClient
-import java.io.InputStream
+import android.webkit.*
+import android.content.Context
+import android.os.Build
+import java.io.*
 import java.net.URL
 import javax.net.ssl.*
 
-class PinningWebViewClient : WebViewClient() {
+class PinningWebViewClient(
+    private val context: Context,
+    private val isDevMode: Boolean = false // set to true in debug/dev
+) : WebViewClient() {
 
     override fun shouldInterceptRequest(
         view: WebView,
@@ -27,33 +29,42 @@ class PinningWebViewClient : WebViewClient() {
     ): WebResourceResponse? {
         val url = request.url.toString()
 
-        // Only intercept HTTPS requests
         if (!url.startsWith("https://")) return null
 
         return try {
             val connection = URL(url).openConnection() as HttpsURLConnection
 
-            // Set SSLContext with pinned cert
+            // Set pinned SSL context
             connection.sslSocketFactory = getPinnedSSLSocketFactory()
             connection.connect()
 
             val contentType = connection.contentType ?: "text/html"
-            val inputStream: InputStream = connection.inputStream
+            val encoding = connection.contentEncoding ?: "utf-8"
+            val inputStream = connection.inputStream
 
-            WebResourceResponse(contentType, connection.contentEncoding, inputStream)
+            WebResourceResponse(contentType, encoding, inputStream)
         } catch (e: Exception) {
             e.printStackTrace()
-            null // Let WebView handle fallback
+
+            if (isDevMode) {
+                // 🔓 Dev fallback: ignore pinning failure, allow request to go through WebView normally
+                return null
+            } else {
+                // Prod fallback: serve error message or block request entirely
+                val errorMessage = "<html><body><h3>Secure connection failed.</h3><p>SSL verification error.</p></body></html>"
+                val stream = ByteArrayInputStream(errorMessage.toByteArray(Charsets.UTF_8))
+                return WebResourceResponse("text/html", "utf-8", stream)
+            }
         }
     }
 
     private fun getPinnedSSLSocketFactory(): SSLSocketFactory {
-        // Load certificate or public key hash
-        val certificateInputStream = ... // Load from /res/raw or assets
-        val factory = SSLPinningHelper.createPinnedFactory(certificateInputStream)
-        return factory
+        // TODO: Load your pinned cert from res/raw or assets
+        val certificateInputStream = context.resources.openRawResource(R.raw.my_cert) // replace with actual cert
+        return SSLPinningHelper.createPinnedFactory(certificateInputStream)
     }
 }
+
 ```
 
 ---
@@ -66,6 +77,12 @@ In your `MainActivity.kt` or wherever you initialize the WebView:
 val myWebView = findViewById<WebView>(R.id.webview)
 myWebView.webViewClient = PinningWebViewClient()
 myWebView.loadUrl("https://your-secure-site.com")
+
+
+/// for fallback usage
+val isDev = BuildConfig.DEBUG
+webView.webViewClient = PinningWebViewClient(this, isDev)
+
 ```
 
 ---
