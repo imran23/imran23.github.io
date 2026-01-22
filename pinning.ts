@@ -11,59 +11,122 @@ Because you're using a hybrid app with a WebView, **you must intercept requests 
 You'll override `shouldInterceptRequest` and perform SSL pinning **manually** for HTTPS requests.
 
 ```kotlin
-import android.webkit.*
+package com.company.proj.webview
+
 import android.content.Context
-import android.os.Build
-import java.io.*
+import android.util.Base64
+import android.util.Log
+import android.webkit.*
+import com.company.proj.network.SSLConfig
+import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.net.URL
+import java.security.MessageDigest
+import java.security.cert.X509Certificate
 import javax.net.ssl.*
 
-class PinningWebViewClient(
+/**
+ * WebViewClient that enforces SSL pinning for HTTPS requests.
+ *
+ * - Uses the same SPKI pins as OkHttp (shared via SSLConfig)
+ * - Blocks connections on pin mismatch (prod)
+ * - Allows fallback in dev/debug mode
+ */
+class SSLPinningWebViewClient(
     private val context: Context,
-    private val isDevMode: Boolean = false // set to true in debug/dev
+    private val isDevMode: Boolean
 ) : WebViewClient() {
 
     override fun shouldInterceptRequest(
         view: WebView,
         request: WebResourceRequest
     ): WebResourceResponse? {
-        val url = request.url.toString()
 
-        if (!url.startsWith("https://")) return null
+        val url = request.url ?: return null
+        if (url.scheme != "https") return null
 
         return try {
-            val connection = URL(url).openConnection() as HttpsURLConnection
-
-            // Set pinned SSL context
-            connection.sslSocketFactory = getPinnedSSLSocketFactory()
+            val connection = url.toURL().openConnection() as HttpsURLConnection
             connection.connect()
+
+            // Validate certificate pin
+            validatePinnedCertificate(connection, url.host)
 
             val contentType = connection.contentType ?: "text/html"
             val encoding = connection.contentEncoding ?: "utf-8"
             val inputStream = connection.inputStream
 
             WebResourceResponse(contentType, encoding, inputStream)
+
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("SSLPinningWebView", "SSL pinning failed for ${request.url}", e)
 
             if (isDevMode) {
-                // 🔓 Dev fallback: ignore pinning failure, allow request to go through WebView normally
-                return null
+                // DEV MODE:
+                // Allow WebView to proceed normally (no pin enforcement)
+                null
             } else {
-                // Prod fallback: serve error message or block request entirely
-                val errorMessage = "<html><body><h3>Secure connection failed.</h3><p>SSL verification error.</p></body></html>"
-                val stream = ByteArrayInputStream(errorMessage.toByteArray(Charsets.UTF_8))
-                return WebResourceResponse("text/html", "utf-8", stream)
+                // PROD MODE:
+                // Block request and return security error page
+                buildErrorResponse()
             }
         }
     }
 
-    private fun getPinnedSSLSocketFactory(): SSLSocketFactory {
-        // TODO: Load your pinned cert from res/raw or assets
-        val certificateInputStream = context.resources.openRawResource(R.raw.my_cert) // replace with actual cert
-        return SSLPinningHelper.createPinnedFactory(certificateInputStream)
+    /**
+     * Validates the server certificate against pinned SPKI hashes.
+     */
+    private fun validatePinnedCertificate(
+        connection: HttpsURLConnection,
+        host: String
+    ) {
+        val certs = connection.serverCertificates
+        if (certs.isEmpty()) {
+            throw SSLPeerUnverifiedException("No server certificates")
+        }
+
+        val x509 = certs[0] as X509Certificate
+        val publicKey = x509.publicKey.encoded
+        val sha256 = sha256Base64(publicKey)
+
+        val validPins = SSLConfig.HOST_PINS[host]
+            ?: throw SSLPeerUnverifiedException("No pins configured for host: $host")
+
+        if (!validPins.contains("sha256/$sha256")) {
+            throw SSLPeerUnverifiedException("Pin mismatch for host: $host")
+        }
+    }
+
+    /**
+     * Computes SHA‑256 Base64 hash of public key (SPKI pin).
+     */
+    private fun sha256Base64(data: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(data)
+        return Base64.encodeToString(digest, Base64.NO_WRAP)
+    }
+
+    /**
+     * Builds a safe error response for production pinning failures.
+     */
+    private fun buildErrorResponse(): WebResourceResponse {
+        val html = """
+            <html>
+              <body style="font-family:sans-serif;padding:24px;">
+                <h3>Secure Connection Failed</h3>
+                <p>This connection could not be verified.</p>
+                <p>Please try again later.</p>
+              </body>
+            </html>
+        """.trimIndent()
+
+        return WebResourceResponse(
+            "text/html",
+            "utf-8",
+            ByteArrayInputStream(html.toByteArray())
+        )
     }
 }
+
 
 ```
 
