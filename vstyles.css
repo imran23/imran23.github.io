@@ -325,22 +325,26 @@ body {
   }
   10%{ opacity: var(--o); }
   100%{
-    transform: translate(calc(var(--x) + var(--drift)), 130px) rotate(45deg) rotate(var(--spin));
+    transform: translate(calc(var(--x) + var(--drift)), 130px)
+               rotate(45deg)
+               rotate(var(--spin));
     opacity: 0;
   }
 }
 
-/* Different petals = different lanes, sizes, speeds */
-.p1{ --x:-30px; --drift: 18px; --spin: 260deg; --dur: 4.8s; --o:.55; width:10px; height:10px; filter: blur(.2px); }
-.p2{ --x:-10px; --drift:-14px; --spin:-320deg; --dur: 6.2s; --o:.45; width:14px; height:14px; filter: blur(.4px); }
-.p3{ --x: 12px; --drift: 10px; --spin: 380deg; --dur: 5.4s; --o:.60; width:12px; height:12px; }
-.p4{ --x: 28px; --drift:-16px; --spin:-280deg; --dur: 7.0s; --o:.38; width:16px; height:16px; filter: blur(.6px); }
-.p5{ --x:-22px; --drift: 12px; --spin: 340deg; --dur: 6.6s; --o:.50; width:11px; height:11px; }
-.p6{ --x:  4px; --drift:-10px; --spin:-420deg; --dur: 5.9s; --o:.52; width:13px; height:13px; }
-.p7{ --x: 20px; --drift: 14px; --spin: 300deg; --dur: 6.8s; --o:.42; width:9px;  height:9px;  filter: blur(.3px); }
-.p8{ --x:-2px;  --drift: -8px; --spin:-260deg; --dur: 7.6s; --o:.35; width:15px; height:15px; filter: blur(.8px); }
+/* 10 unique petals (balanced spacing + motion) */
+.p1{ --x:-34px; --drift: 20px; --spin: 260deg; --dur: 4.8s; --o:.55; width:10px; height:10px; filter: blur(.2px); }
+.p2{ --x:-18px; --drift:-16px; --spin:-320deg; --dur: 6.2s; --o:.45; width:14px; height:14px; filter: blur(.4px); }
+.p3{ --x:-4px;  --drift: 14px; --spin: 380deg; --dur: 5.4s; --o:.60; width:12px; height:12px; }
+.p4{ --x: 10px; --drift:-18px; --spin:-280deg; --dur: 7.0s; --o:.38; width:16px; height:16px; filter: blur(.6px); }
+.p5{ --x: 24px; --drift: 12px; --spin: 340deg; --dur: 6.6s; --o:.50; width:11px; height:11px; }
+.p6{ --x: 36px; --drift:-12px; --spin:-420deg; --dur: 5.9s; --o:.52; width:13px; height:13px; }
+.p7{ --x:-28px; --drift: 16px; --spin: 300deg; --dur: 6.8s; --o:.42; width:9px;  height:9px;  filter: blur(.3px); }
+.p8{ --x:  6px; --drift:-10px; --spin:-260deg; --dur: 7.6s; --o:.35; width:15px; height:15px; filter: blur(.8px); }
+.p9{ --x: 18px; --drift: 18px; --spin: 420deg; --dur: 5.2s; --o:.48; width:12px; height:12px; }
+.p10{--x:-12px; --drift:-20px; --spin:-360deg; --dur: 6.9s; --o:.40; width:14px; height:14px; filter: blur(.5px); }
 
-/* Stagger start times so they don't fall in sync */
+/* Stagger start times */
 .p1{ animation-delay: -0.4s; }
 .p2{ animation-delay: -2.1s; }
 .p3{ animation-delay: -1.2s; }
@@ -349,24 +353,17 @@ body {
 .p6{ animation-delay: -1.8s; }
 .p7{ animation-delay: -4.1s; }
 .p8{ animation-delay: -3.6s; }
+.p9{ animation-delay: -0.9s; }
+.p10{animation-delay: -2.9s; }
 
-/* Reduce motion for accessibility */
-@media (prefers-reduced-motion: reduce){
-  .petal{ animation: none; opacity: .35; }
-}
-
-/* Gust effect: briefly push petals sideways + speed up */
+/* Gust effect */
 .petalScene.gust .petal{
   animation-duration: calc(var(--dur) * 0.55);
   filter: drop-shadow(0 10px 14px rgba(255,46,122,.14));
+  animation-timing-function: cubic-bezier(.15,.75,.2,1);
 }
 
-.petalScene.gust .petal{
-  /* extra sideways shove during gust */
-  --drift: calc(var(--drift) + var(--gust));
-}
-
-/* Each petal gets its own gust amount so it looks natural */
+/* Individual gust strengths */
 .petal{ --gust: 0px; }
 .p1{ --gust: 18px; }
 .p2{ --gust: 28px; }
@@ -376,8 +373,14 @@ body {
 .p6{ --gust: 26px; }
 .p7{ --gust: 30px; }
 .p8{ --gust: 20px; }
-.p9{ --gust: 20px; }
-.p10{ --gust: 20px; }
+.p9{ --gust: 24px; }
+.p10{--gust: 32px; }
+
 .petalScene.gust .petal{
-  animation-timing-function: cubic-bezier(.15,.75,.2,1);
+  --drift: calc(var(--drift) + var(--gust));
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce){
+  .petal{ animation: none; opacity: .35; }
 }
