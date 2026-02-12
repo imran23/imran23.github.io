@@ -210,6 +210,41 @@
       60%{ transform:scale(1.02); }
       100%{ transform:scale(1); }
     }
+    /* Sparkle trail */
+.sparkle{
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 99999;
+  background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,.35) 35%, rgba(255,255,255,0) 70%);
+  filter: drop-shadow(0 6px 10px rgba(255,46,122,.20));
+  will-change: transform, opacity;
+}
+
+@keyframes sparkleFade {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--sx), var(--sy)) scale(.2); opacity: 0; }
+}
+
+/* Confetti */
+.confetti{
+  position: fixed;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 99999;
+  will-change: transform, opacity;
+  opacity: 0.95;
+}
+
+@keyframes confettiPop {
+  0%   { transform: translate(0,0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--cx), var(--cy)) rotate(var(--cr)); opacity: 0; }
+}
+
   </style>
 </head>
 <body>
@@ -239,77 +274,115 @@
 
   const title = document.getElementById("title");
   const yesBtn = document.getElementById("yesBtn");
-  const noBtn = document.getElementById("noBtn");
-  const card = document.getElementById("card");
-  const note = document.getElementById("note");
+  const noBtn  = document.getElementById("noBtn");
+  const card   = document.getElementById("card");
+  const note   = document.getElementById("note");
 
   title.textContent = `${GIRLFRIEND_NAME}, will you be my valentine?`;
 
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
-  // Move No into card for proper positioning
+  // Ensure No is positioned relative to the card (and visible)
   card.appendChild(noBtn);
   noBtn.style.position = "absolute";
   noBtn.style.zIndex = "10";
 
+  // ---------------------------
+  // YES grows on each NO dodge
+  // ---------------------------
+  let dodgeCount = 0;
+  let yesScale = 1;
+
+  function bumpYes() {
+    dodgeCount++;
+    yesScale = Math.min(1 + dodgeCount * 0.06, 1.65); // growth + cap
+
+    yesBtn.style.transform = `scale(${yesScale})`;
+
+    // bounce
+    yesBtn.animate(
+      [
+        { transform: `scale(${yesScale})` },
+        { transform: `scale(${yesScale + 0.06})` },
+        { transform: `scale(${yesScale})` },
+      ],
+      { duration: 220, easing: "ease-out" }
+    );
+
+    note.textContent =
+      dodgeCount < 4
+        ? "“No” is getting nervous 😈"
+        : "Okay okay… the universe is voting YES 💘";
+  }
+
   function placeNoInitial() {
     const c = card.getBoundingClientRect();
     const b = noBtn.getBoundingClientRect();
-    const pad = 20;
+    const pad = 16;
 
-    noBtn.style.left = `${c.width - b.width - 80}px`;
-    noBtn.style.top = `140px`;
+    const x = c.width - b.width - 90;
+    const y = 150;
+
+    noBtn.style.left = `${clamp(x, pad, c.width - b.width - pad)}px`;
+    noBtn.style.top  = `${clamp(y, pad, c.height - b.height - pad)}px`;
   }
 
   window.addEventListener("load", placeNoInitial);
   window.addEventListener("resize", placeNoInitial);
 
-  // 👇 Controlled movement (small dodge instead of teleport)
-  const MOVE_DISTANCE = 80;     // how far it jumps
-  const TRIGGER_RADIUS = 140;   // how close cursor must be
+  // ---------------------------
+  // NO dodges: short movement
+  // ---------------------------
+  const MOVE_DISTANCE  = 55;   // small hop (tune 40–80)
+  const TRIGGER_RADIUS = 135;  // how close cursor must be
+  let lastMoveAt = 0;
 
   function moveNoSlightly(fromX, fromY) {
+    // throttle so it's not frantic
+    const now = performance.now();
+    if (now - lastMoveAt < 120) return;
+    lastMoveAt = now;
+
     const c = card.getBoundingClientRect();
     const b = noBtn.getBoundingClientRect();
-    const pad = 20;
+    const pad = 16;
 
     const cx = fromX - c.left;
     const cy = fromY - c.top;
 
-    const nbCenterX = parseFloat(noBtn.style.left) + b.width / 2;
-    const nbCenterY = parseFloat(noBtn.style.top) + b.height / 2;
+    const curLeft = parseFloat(noBtn.style.left) || (c.width - b.width - 90);
+    const curTop  = parseFloat(noBtn.style.top)  || 150;
 
-    // Direction away from cursor
-    const dx = nbCenterX - cx;
-    const dy = nbCenterY - cy;
+    const nbCenterX = curLeft + b.width / 2;
+    const nbCenterY = curTop  + b.height / 2;
+
+    // direction away from cursor + tiny wobble
+    let dx = (nbCenterX - cx) + (Math.random() - 0.5) * 18;
+    let dy = (nbCenterY - cy) + (Math.random() - 0.5) * 14;
     const dist = Math.hypot(dx, dy) || 1;
 
-    const moveX = (dx / dist) * MOVE_DISTANCE;
-    const moveY = (dy / dist) * MOVE_DISTANCE;
+    let newX = curLeft + (dx / dist) * MOVE_DISTANCE;
+    let newY = curTop  + (dy / dist) * MOVE_DISTANCE;
 
-    let newX = parseFloat(noBtn.style.left) + moveX;
-    let newY = parseFloat(noBtn.style.top) + moveY;
-
-    const maxX = c.width - b.width - pad;
+    const maxX = c.width  - b.width  - pad;
     const maxY = c.height - b.height - pad;
 
     newX = clamp(newX, pad, maxX);
     newY = clamp(newY, pad, maxY);
 
     noBtn.style.left = `${newX}px`;
-    noBtn.style.top = `${newY}px`;
+    noBtn.style.top  = `${newY}px`;
+
+    bumpYes();
   }
 
   card.addEventListener("mousemove", (e) => {
     const nb = noBtn.getBoundingClientRect();
     const dist = Math.hypot(
-      (nb.left + nb.width/2) - e.clientX,
-      (nb.top  + nb.height/2) - e.clientY
+      (nb.left + nb.width / 2) - e.clientX,
+      (nb.top  + nb.height / 2) - e.clientY
     );
-
-    if (dist < TRIGGER_RADIUS) {
-      moveNoSlightly(e.clientX, e.clientY);
-    }
+    if (dist < TRIGGER_RADIUS) moveNoSlightly(e.clientX, e.clientY);
   });
 
   noBtn.addEventListener("pointerenter", (e) => moveNoSlightly(e.clientX, e.clientY));
@@ -318,15 +391,165 @@
     moveNoSlightly(e.clientX, e.clientY);
   });
 
-  // Yes button celebration stays same
+  // ---------------------------
+  // Sparkle cursor trail
+  // ---------------------------
+  let lastSparkleAt = 0;
+
+  function sparkleAt(x, y) {
+    const s = document.createElement("div");
+    s.className = "sparkle";
+    s.style.left = (x - 4) + "px";
+    s.style.top  = (y - 4) + "px";
+
+    // small random drift
+    const sx = (Math.random() * 24 - 12).toFixed(0) + "px";
+    const sy = (Math.random() * 24 - 12).toFixed(0) + "px";
+    s.style.setProperty("--sx", sx);
+    s.style.setProperty("--sy", sy);
+
+    const dur = (Math.random() * 180 + 220).toFixed(0);
+    s.style.animation = `sparkleFade ${dur}ms ease-out forwards`;
+
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), +dur);
+  }
+
+  window.addEventListener("mousemove", (e) => {
+    const now = performance.now();
+    if (now - lastSparkleAt < 28) return; // throttle density
+    lastSparkleAt = now;
+    sparkleAt(e.clientX, e.clientY);
+  }, { passive: true });
+
+  // ---------------------------
+  // Heart burst (existing idea)
+  // ---------------------------
+  function burstHearts(originX, originY){
+    const count = 28;
+    for (let i = 0; i < count; i++){
+      const h = document.createElement("div");
+      h.className = "heart";
+      h.style.left = `${originX - 7}px`;
+      h.style.top  = `${originY - 7}px`;
+
+      const dx = (Math.random() * 260 - 130).toFixed(0) + "px";
+      const dy = (-1 * (Math.random() * 260 + 120)).toFixed(0) + "px";
+      const s  = (Math.random() * 0.9 + 0.6).toFixed(2);
+
+      h.style.setProperty("--dx", dx);
+      h.style.setProperty("--dy", dy);
+      h.style.setProperty("--s", s);
+
+      const dur = (Math.random() * 450 + 650).toFixed(0);
+      h.style.animation = `floatUp ${dur}ms ease-out forwards`;
+
+      document.body.appendChild(h);
+      setTimeout(() => h.remove(), dur);
+    }
+  }
+
+  // ---------------------------
+  // Mini confetti pop on YES
+  // ---------------------------
+  const confettiColors = ["#ff2e7a", "#ffffff", "#ffd1e1", "#ff8fb3", "#ff0f66"];
+
+  function confettiPop(originX, originY) {
+    const count = 22;
+    for (let i = 0; i < count; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = (originX - 4) + "px";
+      c.style.top  = (originY - 6) + "px";
+      c.style.background = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+
+      const cx = (Math.random() * 220 - 110).toFixed(0) + "px";
+      const cy = (-1 * (Math.random() * 260 + 120)).toFixed(0) + "px";
+      const cr = (Math.random() * 720 - 360).toFixed(0) + "deg";
+      c.style.setProperty("--cx", cx);
+      c.style.setProperty("--cy", cy);
+      c.style.setProperty("--cr", cr);
+
+      const dur = (Math.random() * 350 + 550).toFixed(0);
+      c.style.animation = `confettiPop ${dur}ms ease-out forwards`;
+
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), +dur);
+    }
+  }
+
+  function showBanner(text = "YAY! 💖") {
+    const banner = document.createElement("div");
+    banner.textContent = text;
+    banner.style.position = "absolute";
+    banner.style.left = "50%";
+    banner.style.top = "18px";
+    banner.style.transform = "translateX(-50%)";
+    banner.style.padding = "10px 16px";
+    banner.style.borderRadius = "999px";
+    banner.style.background = "rgba(255,46,122,.12)";
+    banner.style.border = "1px solid rgba(255,46,122,.25)";
+    banner.style.fontWeight = "900";
+    banner.style.backdropFilter = "blur(6px)";
+    banner.style.boxShadow = "0 12px 25px rgba(255,46,122,.18)";
+    banner.style.pointerEvents = "none";
+    banner.style.zIndex = "20";
+
+    card.appendChild(banner);
+
+    banner.animate(
+      [
+        { opacity: 0, transform: "translateX(-50%) translateY(-10px) scale(.95)" },
+        { opacity: 1, transform: "translateX(-50%) translateY(0px) scale(1)" }
+      ],
+      { duration: 240, easing: "ease-out", fill: "forwards" }
+    );
+
+    setTimeout(() => {
+      banner.animate(
+        [
+          { opacity: 1, transform: "translateX(-50%) translateY(0px) scale(1)" },
+          { opacity: 0, transform: "translateX(-50%) translateY(-10px) scale(.98)" }
+        ],
+        { duration: 260, easing: "ease-in", fill: "forwards" }
+      );
+      setTimeout(() => banner.remove(), 280);
+    }, 1400);
+  }
+
+  function cardCelebrate() {
+    card.animate(
+      [
+        { transform: "translateY(0) rotate(0deg)" },
+        { transform: "translateY(-2px) rotate(-0.6deg)" },
+        { transform: "translateY(0) rotate(0.6deg)" },
+        { transform: "translateY(-1px) rotate(-0.3deg)" },
+        { transform: "translateY(0) rotate(0deg)" }
+      ],
+      { duration: 520, easing: "ease-in-out" }
+    );
+  }
+
+  // ---------------------------
+  // YES click
+  // ---------------------------
   let accepted = false;
+
   yesBtn.addEventListener("click", () => {
     if (accepted) return;
     accepted = true;
 
-    card.classList.add("success");
-    title.textContent = "YAYYYYY 💖 See you on Valentine’s Day😌";
-    note.textContent = "Best decision ever. (I knew you’d say yes 😈)";
+    const r = yesBtn.getBoundingClientRect();
+    const x = r.left + r.width / 2;
+    const y = r.top + r.height / 2;
+
+    burstHearts(x, y);
+    confettiPop(x, y);
+    showBanner("YAY! 💖 It’s a date!");
+    cardCelebrate();
+
+    title.textContent = `YESSSSS! 💘 ${GIRLFRIEND_NAME}, you’re my Valentine 🥰`;
+    note.textContent = "Best decision ever 😈";
     yesBtn.textContent = "💘";
 
     noBtn.disabled = true;
