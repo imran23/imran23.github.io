@@ -179,7 +179,12 @@
   yesBtn.addEventListener("click", () => {
     if (accepted) return;
     accepted = true;
-
+    // Gust of wind through the petals on YES
+    const petalScene = document.querySelector(".petalScene");
+    if (petalScene) {
+    petalScene.classList.add("gust");
+    setTimeout(() => petalScene.classList.remove("gust"), 700);
+    }
     const r = yesBtn.getBoundingClientRect();
     confettiPop(r.left + r.width / 2, r.top + r.height / 2);
 
@@ -191,4 +196,6 @@
 
     openDateModal();
   });
+
+
 
